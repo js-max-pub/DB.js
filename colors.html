@@ -1,0 +1,24 @@
+<style>
+	div{width: 30px; height: 30px; display: block; margin-bottom:0px;}
+</style>
+<body></body>
+<script>
+	hex = '0123456789abcdef'.split('');
+	var html = '';
+
+	for(var i=0; i<360; i++)
+		// for(var j=0; j<3;j++)
+		html += "<div style='background:hsl("+i+","+5+"0%,50%);'></div>"
+
+	// for (var red in hex) 
+	// 	for (var green in hex) {
+	// 		for (var blue in hex) 
+	// 			html += "<div style='background:#"+hex[red]+hex[green]+hex[blue]+";'></div>"
+	// 		html+='<br/>';
+	// 			// console.log('color',hex[red],hex[green],hex[blue]);
+	// 	}
+
+
+	document.body.innerHTML = html;
+
+</script>
