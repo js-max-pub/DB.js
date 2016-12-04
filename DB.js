@@ -1,8 +1,10 @@
 class DB {
+
 	constructor(name, version) {
 		this.upgradeInfo = {};
 		this.openDB(name, version);
 	}
+
 	openDB(name = 'database', version = 1) {
 		this.name = name;
 		this.version = version;
@@ -41,17 +43,27 @@ class DB {
 				}
 
 				conf.indices.forEach((ic, index) => {
-					// console.log('index....', index, ic, store.indexNames.includes(index));
 					try {
+						console.log('DB.createIndex', index, ic);
 						store.createIndex(index, index, ic);
-						console.log('DB.createIndex', index);
 					} catch (e) {}
 				});
 			}
 		};
 	}
 
-	addStore(name, key, ...indices) {
+	addStore(name, key, indices) {
+		if (!this.db.objectStoreNames.contains(name)) return this._addStore(name, key, indices);
+		let store = this.db.transaction([name]).objectStore(name);
+		for (let index of indices) {
+			if (index[0] == '!') index = index.slice(1);
+			if (!store.indexNames.contains(index))
+				return this._addStore(name, key, indices);
+		}
+		console.log('DB.addStore', name, '... store and indices already added');
+	}
+
+	_addStore(name, key, indices) {
 		let conf = {
 			store: {},
 			indices: new Map()
@@ -74,31 +86,41 @@ class DB {
 		return this;
 	}
 
-	static logState(name, req) {
-		req.onsuccess = e => console.log(name, e, req);
-		req.onerror = e => console.error(name, e, req);
-	}
-
+	// static logEvent(name, request) {
+	// 	req.onsuccess = event => console.log(name, event, request);
+	// 	req.onerror = event => console.error(name, event, request);
+	// }
 }
 
 
 
 class DBstore {
 	constructor(db, name) {
-		console.log('new DBstore', name);
+		// console.log('new DBstore', name);
 		this.db = db;
 		this.name = name;
-		// this.db.getObjectStore(name);
-		// this.read = this.db.transaction([name]).objectStore(name);
-		// this.write = this.db.transaction([name], "readwrite").objectStore(name);
 	}
-	write() {
+	access(type, callback) {
 		return this.db.transaction([this.name], "readwrite").objectStore(this.name);
 	}
-	get(key) {
-		return DBstore.promise(this.write().get(key));
+	query(index, filter) {
+		if (filter.length == 1) var bounds = IDBKeyRange.only(filter[0]);
+		else if (!filter[0]) var bounds = IDBKeyRange.upperBound(filter[1]);
+		else if (!filter[1]) var bounds = IDBKeyRange.lowerBound(filter[0]);
+		else var bounds = IDBKeyRange.bound(filter[0], filter[1]);
+		return new DBcursor(this.write().index(index).openCursor(bounds));
+	}
+	get(index, key) {
+		if (key)
+			var tx = this.write().index(index).get(key)
+		else
+			var tx = this.write().get(index);
+		return DBstore.promise(tx);
 	}
 	add(data) {
+		this.access(tx => {
+			tx.add(data);
+		}, 'readwrite');
 		return DBstore.promise(this.write().add(data));
 	}
 	put(data) {
@@ -108,36 +130,61 @@ class DBstore {
 		return DBstore.promise(this.write().delete(data));
 	}
 
-	static promise(req) { // transform event-handlers into ES6-Promises
+	static promise(request) { // transform event-handlers into ES6-Promises
 		return new Promise((resolve, reject) => {
-			req.onsuccess = e => resolve(req.result);
-			req.onerror = e => reject(e);
+			request.onsuccess = event => resolve(request.result);
+			request.onerror = event => reject(event);
 		});
 	}
 }
 
-// DB.logState('store:' + name, store);
-// this.upgradeDone = true;
-// for (let name in this.stores)
-// 	DB.logState('store:' + name, db.createObjectStore(name, this.stores[name]))
-// this.upgradeDone = true;
 
 
-// listStores() {
-// 	return this.db.objectStoreNames;
-// }
-// addStore(name, config) {
-// 	this.stores[name] = config;
-// 	if (this.upgradeDone) this.openDB(this.name, this.version++);
-// 	return this;
-// }
-// store(name) {
-// 	return new DBstore(this.db, name);
-// }
+class DBcursor {
+	constructor(tx) {
+		var list = [];
+		tx.onsuccess = event => {
+			var cursor = event.target.result;
+			if (cursor) {
+				if (this.f1)
+					this.f1(cursor.value);
+				list.push(cursor.value);
+				cursor.continue();
+			} else {
+				if (this.f2)
+					this.f2(list);
+			}
+		};
+	}
+	forEach(callback) {
+		this.f1 = callback;
+		return this;
+	}
+	getAll(callback) {
+		this.f2 = callback;
+		return this;
+	}
+	saveTo(map) {
 
-// let storeConf = {};
-// if (config[name].key) storeConf.keyPath = config[name].key;
-// else storeConf.autoIncrement = true;
+	}
+}
 
-// console.log('has store', name, store);
-// if (!store)
+
+
+// this.write().index(index).openCursor(bounds).onsuccess = event => {
+// 	var cursor = event.target.result;
+// 	if (cursor) {
+// 		if (callback)
+// 			callback(cursor.value);
+// 		// console.log("CURSOR", cursor.value);
+// 		cursor.continue();
+// 	}
+// };
+
+
+// return DBstore.promise(this.write().index(name).get(key));
+
+
+// this.db.getObjectStore(name);
+// this.read = this.db.transaction([name]).objectStore(name);
+// this.write = this.db.transaction([name], "readwrite").objectStore(name);
